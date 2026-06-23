@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Painel de Operacao</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="dashboard-shell">
+      <header class="top-bar">
+        <div class="logo-slot" aria-label="Espaco para logo">
+          <img src="Logo UPCHAT.png" alt="Logo da UPCHAT" />
+        </div>
+
+        <div class="title-wrap">
+          <h1>Painel de Operação</h1>
+        </div>
+
+        <div class="last-update" id="lastUpdate">Atualizando...</div>
+      </header>
+
+      <main class="content-grid">
+        <section class="panel analysts-panel">
+          <div class="panel-header">
+            <h2>Analistas e Carteira</h2>
+            <span class="badge" id="analystCount">0 analistas</span>
+          </div>
+          <div class="panel-list" id="analystsList"></div>
+        </section>
+
+        <section class="panel unanswered-panel">
+          <div class="panel-header">
+            <h2>Clientes Sem Resposta</h2>
+            <span class="badge warning" id="unansweredCount">0 clientes</span>
+          </div>
+          <div class="panel-list" id="unansweredList"></div>
+        </section>
+
+        <section class="panel notices-panel">
+          <div class="panel-header">
+            <h2>Avisos Operacionais</h2>
+            <span class="badge info" id="noticeCount">0 avisos</span>
+          </div>
+          <div class="panel-list" id="noticesList"></div>
+        </section>
+
+        <aside class="panel status-panel">
+          <div class="panel-header">
+            <h2>Status Externo</h2>
+          </div>
+
+          <div class="status-list" id="statusList">
+            <div class="status-item loading">Carregando status...</div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>
