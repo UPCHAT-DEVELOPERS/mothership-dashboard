@@ -5,12 +5,12 @@ const ENDPOINTS = {
   analysts: `${SHEET_BASE_URL}/analistas`,
   unanswered: `${SHEET_BASE_URL}/respostas`,
   notices: `${SHEET_BASE_URL}/avisos`,
-  metaStatus: "https://metastatus.com/api/v2/status.json",
-  cloudflareStatus: "https://www.cloudflarestatus.com/api/v2/status.json",
+  metaStatus: "https://metastatus.com/data/outages/whatsapp-business-api.json",
+  cloudflareStatus: "https://www.cloudflarestatus.com/api/v2/summary.json",
 };
 
 const REFRESH = {
-  dashboardMs: 60000,
+  dashboardMs: 120000,
   statusMs: 120000,
 };
 
@@ -103,7 +103,6 @@ async function fetchJson(url) {
   if (!response.ok) {
     throw new Error(`Falha ao carregar ${url}: ${response.status}`);
   }
-
   return response.json();
 }
 
@@ -197,78 +196,15 @@ function renderNotices(data) {
 }
 
 async function getMetaWhatsappStatus() {
-  const [metaStatus, metaComponents] = await Promise.all([
-    fetchJson(ENDPOINTS.metaStatus),
-    fetchJson(ENDPOINTS.metaComponents),
-  ]);
+  const metaStatus = fetchJson(ENDPOINTS.metaStatus)
 
-  const metaGlobalIndicator = metaStatus?.status?.indicator;
-  const globalNormalized = normalizeStatus(metaGlobalIndicator);
-
-  const components = Array.isArray(metaComponents?.components)
-    ? metaComponents.components
-    : [];
-
-  const whatsappComponent = components.find((component) => {
-    const name = sanitizeText(component?.name, "").toLowerCase();
-    return name.includes("whatsapp") && name.includes("business");
-  });
-
-  const whatsappNormalized = normalizeStatus(whatsappComponent?.status);
-
-  return [
-    {
-      name: "Meta Global",
-      detail: globalNormalized.label,
-      impact: globalNormalized.impact,
-    },
-    {
-      name: "WhatsApp Business API",
-      detail: whatsappComponent
-        ? `${sanitizeText(whatsappComponent.name)}: ${whatsappNormalized.label}`
-        : "Componente nao encontrado no status publico",
-      impact: whatsappComponent ? whatsappNormalized.impact : "warn",
-    },
-  ];
+  return metaStatus;
 }
 
 async function getCloudflareStatus() {
-  const [globalStatusData, componentsData] = await Promise.all([
-    fetchJson(ENDPOINTS.cloudflareStatus),
-    fetchJson(ENDPOINTS.cloudflareComponents),
-  ]);
+  const cloudflareStatus = fetchJson(ENDPOINTS.cloudflareStatus)
 
-  const globalNormalized = normalizeStatus(globalStatusData?.status?.indicator);
-  const components = Array.isArray(componentsData?.components)
-    ? componentsData.components
-    : [];
-
-  const brazilComponent = components.find((component) => {
-    const name = sanitizeText(component?.name, "").toLowerCase();
-    return (
-      name.includes("brazil") ||
-      name.includes("brasil") ||
-      name.includes("sao paulo") ||
-      name.includes("latin america")
-    );
-  });
-
-  const brazilNormalized = normalizeStatus(brazilComponent?.status);
-
-  return [
-    {
-      name: "Cloudflare Global",
-      detail: globalNormalized.label,
-      impact: globalNormalized.impact,
-    },
-    {
-      name: "Cloudflare Brasil",
-      detail: brazilComponent
-        ? `${sanitizeText(brazilComponent.name)}: ${brazilNormalized.label}`
-        : "Sem componente dedicado ao Brasil no status publico",
-      impact: brazilComponent ? brazilNormalized.impact : "warn",
-    },
-  ];
+  return cloudflareStatus;
 }
 
 function renderStatus(items) {
@@ -286,7 +222,38 @@ function renderStatus(items) {
   }
 
   items.forEach((item) => {
-    statusList.append(buildStatusItem(item));
+    const { name, response } = item;
+    const { label, impact } = normalizeStatus(response?.indicator);
+
+    if (name === "Meta Whatsapp") {
+      response.length === 0 && statusList.append(
+        buildStatusItem({
+          name,
+          detail: `Sem problemas`,
+          impact: "ok",
+        })
+      );
+      response.length > 0 && statusList.append(
+        buildStatusItem({
+          name,
+          detail: `Instabilidade detectada: ${response.map(title => title).join(", ")}`,
+          impact: "risk",
+        })
+      );
+    }
+
+    if (name === "Cloudflare") {
+      const cloudflareIndicator = response?.status?.indicator;
+      const { label, impact } = normalizeStatus(cloudflareIndicator);
+
+      statusList.append(
+        buildStatusItem({
+          name,
+          detail: label,
+          impact,
+        })
+      );
+    }
   });
 }
 
@@ -326,7 +293,7 @@ async function refreshStatusData() {
       getCloudflareStatus(),
     ]);
 
-    renderStatus([...metaStatus, ...cloudflareStatus]);
+    renderStatus([{name: "Meta Whatsapp", response: metaStatus}, {name: "Cloudflare", response: cloudflareStatus}]);
   } catch (error) {
     console.error(error);
     renderStatus([
@@ -340,11 +307,11 @@ async function refreshStatusData() {
 }
 
 async function bootstrap() {
-  await Promise.all([refreshDashboardData(), ]);
+  await Promise.all([refreshDashboardData(), refreshStatusData()]);
+
 
   setInterval(refreshDashboardData, REFRESH.dashboardMs);
-//   setInterval(refreshDashboardData, REFRESH.dashboardMs, refreshStatusData);
-//   setInterval(refreshStatusData, REFRESH.statusMs);
+  setInterval(refreshStatusData, REFRESH.statusMs);
 }
 
 bootstrap();
