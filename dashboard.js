@@ -23,6 +23,22 @@ const analystCount = document.getElementById("analystCount");
 const unansweredCount = document.getElementById("unansweredCount");
 const noticeCount = document.getElementById("noticeCount");
 const lastUpdate = document.getElementById("lastUpdate");
+const notificationAudio = document.getElementById("notificationAudio");
+const soundToggle = document.getElementById("soundToggle");
+const unansweredNoticeCard = document.getElementById("unansweredNoticeCard");
+const operationsNoticeCard = document.getElementById("operationsNoticeCard");
+const unansweredNoticeText = document.getElementById("unansweredNoticeText");
+const operationsNoticeText = document.getElementById("operationsNoticeText");
+const notificationFeed = document.getElementById("notificationFeed");
+const notificationHub = document.querySelector(".notification-hub");
+const clearNotificationsBtn = document.getElementById("clearNotificationsBtn");
+const notificationMinimizeBtn = document.getElementById("notificationMinimizeBtn");
+
+const seenUnansweredKeys = new Set();
+const seenNoticeKeys = new Set();
+let initialNotificationSync = false;
+let soundEnabled = true;
+let hubMinimized = false;
 
 function sanitizeText(value, fallback = "-") {
   if (value === null || value === undefined || value === "") {
@@ -33,6 +49,203 @@ function sanitizeText(value, fallback = "-") {
 
 function setEmptyState(container, message) {
   container.innerHTML = `<div class="empty-state">${message}</div>`;
+}
+
+function clearHighlight(card) {
+  if (!card) {
+    return;
+  }
+
+  card.classList.remove("highlight");
+  // Force reflow so rapid consecutive notifications replay the animation.
+  void card.offsetWidth;
+  card.classList.add("highlight");
+}
+
+function playNotificationSound() {
+  if (!soundEnabled || !notificationAudio) {
+    return;
+  }
+
+  notificationAudio.currentTime = 0;
+  notificationAudio.play().catch(() => {
+    // Autoplay may be blocked by the browser until user interaction.
+  });
+}
+
+function setNotificationHubMinimized(value) {
+  hubMinimized = Boolean(value);
+
+  if (notificationHub) {
+    notificationHub.classList.toggle("minimized", hubMinimized);
+  }
+
+  if (notificationMinimizeBtn) {
+    notificationMinimizeBtn.textContent = hubMinimized ? "Expandir" : "Minimizar";
+  }
+}
+
+function openNotificationHubForAlert() {
+  if (hubMinimized) {
+    setNotificationHubMinimized(false);
+  }
+}
+
+function clearNotificationsFeed() {
+  if (notificationFeed) {
+    notificationFeed.innerHTML = `<div class="empty-state">Sem notificacoes recentes.</div>`;
+  }
+
+  unansweredNoticeCard?.classList.remove("highlight");
+  operationsNoticeCard?.classList.remove("highlight");
+
+  if (unansweredNoticeText) {
+    unansweredNoticeText.textContent = "Sem novas entradas";
+  }
+
+  if (operationsNoticeText) {
+    operationsNoticeText.textContent = "Sem novas entradas";
+  }
+}
+
+function pushNotification(type, message) {
+  if (!notificationFeed) {
+    return;
+  }
+
+  const hasEmptyState = notificationFeed.querySelector(".empty-state");
+  if (hasEmptyState) {
+    notificationFeed.innerHTML = "";
+  }
+
+  const item = document.createElement("article");
+  item.className = `notification-item ${type}`;
+
+  const now = new Date().toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  item.textContent = `[${now}] ${message}`;
+  notificationFeed.prepend(item);
+
+  const maxItems = 12;
+  while (notificationFeed.children.length > maxItems) {
+    notificationFeed.removeChild(notificationFeed.lastElementChild);
+  }
+}
+
+function makeItemKey(item, primaryField, fallbackField) {
+  const primary = sanitizeText(item?.[primaryField], "").trim();
+  if (primary) {
+    return `${primaryField}:${primary}`;
+  }
+
+  const fallback = sanitizeText(item?.[fallbackField], "").trim();
+  return fallback ? `${fallbackField}:${fallback}` : "";
+}
+
+function updateNotificationSummary() {
+  if (unansweredNoticeText) {
+    unansweredNoticeText.textContent =
+      seenUnansweredKeys.size > 0
+        ? `${seenUnansweredKeys.size} item(ns) monitorado(s)`
+        : "Sem novas entradas";
+  }
+
+  if (operationsNoticeText) {
+    operationsNoticeText.textContent =
+      seenNoticeKeys.size > 0
+        ? `${seenNoticeKeys.size} item(ns) monitorado(s)`
+        : "Sem novas entradas";
+  }
+}
+
+function initSoundControl() {
+  if (!soundToggle) {
+    return;
+  }
+
+  soundToggle.addEventListener("click", () => {
+    soundEnabled = !soundEnabled;
+    soundToggle.setAttribute("aria-pressed", String(!soundEnabled));
+    soundToggle.textContent = soundEnabled ? "Som ligado" : "Som desligado";
+
+    if (hubMinimized) {
+      setNotificationHubMinimized(false);
+    }
+  });
+}
+
+function initNotificationHubControls() {
+  if (clearNotificationsBtn) {
+    clearNotificationsBtn.addEventListener("click", clearNotificationsFeed);
+  }
+
+  if (notificationMinimizeBtn) {
+    notificationMinimizeBtn.addEventListener("click", () => {
+      setNotificationHubMinimized(!hubMinimized);
+    });
+  }
+}
+
+function detectNewUnanswered(unanswered = []) {
+  if (!Array.isArray(unanswered)) {
+    return;
+  }
+
+  let additions = 0;
+
+  unanswered.forEach((client) => {
+    const key = makeItemKey(client, "id_cliente", "nome_do_cliente");
+    if (!key || seenUnansweredKeys.has(key)) {
+      return;
+    }
+
+    seenUnansweredKeys.add(key);
+
+    if (initialNotificationSync) {
+      additions += 1;
+      const name = sanitizeText(client.nome_do_cliente, "Cliente sem nome");
+      pushNotification("unanswered", `Novo cliente sem resposta: ${name}`);
+    }
+  });
+
+  if (additions > 0) {
+    openNotificationHubForAlert();
+    clearHighlight(unansweredNoticeCard);
+    playNotificationSound();
+  }
+}
+
+function detectNewNotices(notices = []) {
+  if (!Array.isArray(notices)) {
+    return;
+  }
+
+  let additions = 0;
+
+  notices.forEach((notice) => {
+    const key = makeItemKey(notice, "id", "aviso");
+    if (!key || seenNoticeKeys.has(key)) {
+      return;
+    }
+
+    seenNoticeKeys.add(key);
+
+    if (initialNotificationSync) {
+      additions += 1;
+      const title = sanitizeText(notice.aviso ?? notice.titulo ?? notice.mensagem, "Novo aviso");
+      pushNotification("notices", `Novo aviso operacional: ${title}`);
+    }
+  });
+
+  if (additions > 0) {
+    openNotificationHubForAlert();
+    clearHighlight(operationsNoticeCard);
+    playNotificationSound();
+  }
 }
 
 function buildRowItem({ title, meta, pill }) {
@@ -265,6 +478,13 @@ async function refreshDashboardData() {
       fetchJson(ENDPOINTS.notices),
     ]);
 
+    detectNewUnanswered(unanswered);
+    detectNewNotices(notices);
+    updateNotificationSummary();
+    if (!initialNotificationSync) {
+      initialNotificationSync = true;
+    }
+
     renderAnalysts(analysts);
     renderUnanswered(unanswered);
     renderNotices(notices);
@@ -307,6 +527,8 @@ async function refreshStatusData() {
 }
 
 async function bootstrap() {
+  initSoundControl();
+  initNotificationHubControls();
   await Promise.all([refreshDashboardData(), refreshStatusData()]);
 
 

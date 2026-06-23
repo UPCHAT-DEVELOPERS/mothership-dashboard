@@ -64,6 +64,37 @@
       </main>
     </div>
 
+    <aside class="notification-hub" aria-live="polite" aria-label="Notificacoes do painel">
+      <div class="notification-hub-header">
+        <h2>Notificacoes</h2>
+        <div class="notification-actions">
+          <button type="button" class="action-btn" id="clearNotificationsBtn">Limpar</button>
+          <button type="button" class="action-btn" id="notificationMinimizeBtn">Minimizar</button>
+          <button type="button" class="sound-toggle" id="soundToggle" aria-pressed="false">
+            Som ligado
+          </button>
+        </div>
+      </div>
+
+      <div class="notification-cards">
+        <article class="notification-card" id="unansweredNoticeCard">
+          <strong>Clientes sem resposta</strong>
+          <small id="unansweredNoticeText">Sem novas entradas</small>
+        </article>
+
+        <article class="notification-card" id="operationsNoticeCard">
+          <strong>Avisos operacionais</strong>
+          <small id="operationsNoticeText">Sem novas entradas</small>
+        </article>
+      </div>
+
+      <div class="notification-feed" id="notificationFeed">
+        <div class="empty-state">Sem notificacoes recentes.</div>
+      </div>
+    </aside>
+
+    <audio id="notificationAudio" preload="auto" src="notificacao.mp3"></audio>
+
     <script src="dashboard.js"></script>
   </body>
 </html>
