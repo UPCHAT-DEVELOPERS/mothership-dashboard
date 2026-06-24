@@ -437,6 +437,7 @@ function renderStatus(items) {
   items.forEach((item) => {
     const { name, response } = item;
     const { label, impact } = normalizeStatus(response?.indicator);
+    console.log(`Status for ${name}:`, response);
 
     if (name === "Meta Whatsapp") {
       response.length === 0 && statusList.append(
@@ -446,13 +447,29 @@ function renderStatus(items) {
           impact: "ok",
         })
       );
-      response.length > 0 && statusList.append(
-        buildStatusItem({
-          name,
-          detail: `Instabilidade detectada: ${response.map(title => title).join(", ")}`,
-          impact: "risk",
-        })
-      );
+      if(response.length > 0) {
+        let isOk = false;
+        for(const item of response) {
+          item.status.toLowerCase() === "resolved" ? isOk = true : false;
+        }
+        if (!isOk) {
+          statusList.append(
+            buildStatusItem({
+              name,
+              detail: `Instabilidade detectada`,
+              impact: "risk",
+            })
+          );
+        } else {
+          statusList.append(
+            buildStatusItem({
+              name,
+              detail: `Sem problemas`,
+              impact: "ok",
+            })
+          );
+        }
+      }
     }
 
     if (name === "Cloudflare") {
@@ -512,6 +529,9 @@ async function refreshStatusData() {
       getMetaWhatsappStatus(),
       getCloudflareStatus(),
     ]);
+
+    console.log("Meta Whatsapp Status:", metaStatus);
+    console.log("Cloudflare Status:", cloudflareStatus);
 
     renderStatus([{name: "Meta Whatsapp", response: metaStatus}, {name: "Cloudflare", response: cloudflareStatus}]);
   } catch (error) {
