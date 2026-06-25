@@ -184,6 +184,23 @@ body {
   gap: 0.2rem;
 }
 
+.row-item.unanswered-ok {
+  border-color: rgba(52, 211, 153, 0.55);
+  background: linear-gradient(110deg, rgba(52, 211, 153, 0.2), rgba(4, 19, 32, 0.56));
+}
+
+.row-item.unanswered-warn {
+  border-color: rgba(245, 158, 11, 0.72);
+  background: linear-gradient(110deg, rgba(245, 158, 11, 0.24), rgba(4, 19, 32, 0.58));
+}
+
+.row-item.unanswered-risk {
+  border-color: rgba(239, 68, 68, 0.82);
+  background: linear-gradient(110deg, rgba(239, 68, 68, 0.26), rgba(4, 19, 32, 0.62));
+  animation: unanswered-risk-pulse 1.05s ease-in-out infinite,
+    unanswered-risk-shake 2.4s linear infinite;
+}
+
 .row-main {
   display: flex;
   justify-content: space-between;
@@ -430,6 +447,48 @@ body {
 
   100% {
     transform: scale(1);
+  }
+}
+
+@keyframes unanswered-risk-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.18);
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px rgba(255, 0, 0, 0.55);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.2);
+  }
+}
+
+@keyframes unanswered-risk-shake {
+  0%,
+  88%,
+  100% {
+    transform: translateX(0);
+  }
+
+  90% {
+    transform: translateX(-2px);
+  }
+
+  92% {
+    transform: translateX(2px);
+  }
+
+  94% {
+    transform: translateX(-2px);
+  }
+
+  96% {
+    transform: translateX(2px);
+  }
+
+  98% {
+    transform: translateX(-1px);
   }
 }
 

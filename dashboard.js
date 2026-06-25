@@ -12,6 +12,7 @@ const ENDPOINTS = {
 const REFRESH = {
   dashboardMs: 120000,
   statusMs: 120000,
+  unansweredTickMs: 60000,
 };
 
 const analystsList = document.getElementById("analystsList");
@@ -24,6 +25,7 @@ const unansweredCount = document.getElementById("unansweredCount");
 const noticeCount = document.getElementById("noticeCount");
 const lastUpdate = document.getElementById("lastUpdate");
 const notificationAudio = document.getElementById("notificationAudio");
+const alertAudio = document.getElementById("alertAudio");
 const soundToggle = document.getElementById("soundToggle");
 const unansweredNoticeCard = document.getElementById("unansweredNoticeCard");
 const operationsNoticeCard = document.getElementById("operationsNoticeCard");
@@ -36,9 +38,11 @@ const notificationMinimizeBtn = document.getElementById("notificationMinimizeBtn
 
 const seenUnansweredKeys = new Set();
 const seenNoticeKeys = new Set();
+const alertedCriticalUnansweredKeys = new Set();
 let initialNotificationSync = false;
 let soundEnabled = true;
 let hubMinimized = false;
+let latestUnanswered = [];
 
 function sanitizeText(value, fallback = "-") {
   if (value === null || value === undefined || value === "") {
@@ -69,6 +73,22 @@ function playNotificationSound() {
 
   notificationAudio.currentTime = 0;
   notificationAudio.play().catch(() => {
+    // Autoplay may be blocked by the browser until user interaction.
+  });
+}
+
+function playAlertSound() {
+  if (!soundEnabled) {
+    return;
+  }
+
+  const audio = alertAudio ?? notificationAudio;
+  if (!audio) {
+    return;
+  }
+
+  audio.currentTime = 0;
+  audio.play().catch(() => {
     // Autoplay may be blocked by the browser until user interaction.
   });
 }
@@ -192,7 +212,7 @@ function initNotificationHubControls() {
 
 function detectNewUnanswered(unanswered = []) {
   if (!Array.isArray(unanswered)) {
-    return;
+    return 0;
   }
 
   let additions = 0;
@@ -213,10 +233,54 @@ function detectNewUnanswered(unanswered = []) {
   });
 
   if (additions > 0) {
-    openNotificationHubForAlert();
-    clearHighlight(unansweredNoticeCard);
-    playNotificationSound();
+    return additions;
   }
+
+  return 0;
+}
+
+function hasNewCriticalUnanswered(unanswered = []) {
+  if (!Array.isArray(unanswered)) {
+    return false;
+  }
+
+  const activeKeys = new Set();
+  let hasCriticalAlert = false;
+
+  unanswered.forEach((client) => {
+    const key = makeItemKey(client, "id_cliente", "nome_do_cliente");
+    if (!key) {
+      return;
+    }
+
+    activeKeys.add(key);
+    const minutesElapsed = getElapsedMinutesFromClockTime(client.tempo);
+
+    if (
+      Number.isFinite(minutesElapsed) &&
+      minutesElapsed >= 10 &&
+      !alertedCriticalUnansweredKeys.has(key)
+    ) {
+      alertedCriticalUnansweredKeys.add(key);
+      hasCriticalAlert = true;
+    }
+  });
+
+  Array.from(alertedCriticalUnansweredKeys).forEach((key) => {
+    if (!activeKeys.has(key)) {
+      alertedCriticalUnansweredKeys.delete(key);
+    }
+  });
+
+  return hasCriticalAlert;
+}
+
+function refreshUnansweredTimers() {
+  if (!Array.isArray(latestUnanswered) || latestUnanswered.length === 0) {
+    return;
+  }
+
+  renderUnanswered(latestUnanswered);
 }
 
 function detectNewNotices(notices = []) {
@@ -248,9 +312,59 @@ function detectNewNotices(notices = []) {
   }
 }
 
-function buildRowItem({ title, meta, pill }) {
+function getElapsedMinutesFromClockTime(clockTime) {
+  const raw = sanitizeText(clockTime, "").trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  const now = new Date();
+  const publishedAt = new Date(now);
+  publishedAt.setHours(hours, minutes, 0, 0);
+
+  let diffMs = now.getTime() - publishedAt.getTime();
+  if (diffMs < 0) {
+    diffMs += 24 * 60 * 60 * 1000;
+  }
+
+  return Math.floor(diffMs / 60000);
+}
+
+function getUnansweredTone(minutesElapsed) {
+  if (!Number.isFinite(minutesElapsed)) {
+    return "";
+  }
+
+  if (minutesElapsed <= 5) {
+    return "unanswered-ok";
+  }
+
+  if (minutesElapsed < 10) {
+    return "unanswered-warn";
+  }
+
+  return "unanswered-risk";
+}
+
+function buildRowItem({ title, meta, pill, toneClass = "" }) {
   const wrapper = document.createElement("article");
-  wrapper.className = "row-item";
+  wrapper.className = ["row-item", toneClass].filter(Boolean).join(" ");
 
   const main = document.createElement("div");
   main.className = "row-main";
@@ -365,13 +479,18 @@ function renderUnanswered(data) {
   data.forEach((client) => {
     const clientName = sanitizeText(client.nome_do_cliente, "Cliente sem nome");
     const responsible = sanitizeText(client.responsavel, "-");
-    const id = sanitizeText(client.id_cliente, "-");
+    const minutesElapsed = getElapsedMinutesFromClockTime(client.tempo);
+    const toneClass = getUnansweredTone(minutesElapsed);
+    const elapsedLabel = Number.isFinite(minutesElapsed)
+      ? `${minutesElapsed} min`
+      : "Pendente";
 
     unansweredList.append(
       buildRowItem({
         title: clientName,
         meta: `Responsavel: ${responsible}`,
-        pill: "Pendente",
+        pill: elapsedLabel,
+        toneClass,
       })
     );
   });
@@ -437,7 +556,6 @@ function renderStatus(items) {
   items.forEach((item) => {
     const { name, response } = item;
     const { label, impact } = normalizeStatus(response?.indicator);
-    console.log(`Status for ${name}:`, response);
 
     if (name === "Meta Whatsapp") {
       response.length === 0 && statusList.append(
@@ -495,16 +613,29 @@ async function refreshDashboardData() {
       fetchJson(ENDPOINTS.notices),
     ]);
 
-    detectNewUnanswered(unanswered);
+    const newUnansweredAdditions = detectNewUnanswered(unanswered);
+    const hasCriticalAlert = initialNotificationSync && hasNewCriticalUnanswered(unanswered);
     detectNewNotices(notices);
     updateNotificationSummary();
     if (!initialNotificationSync) {
       initialNotificationSync = true;
     }
 
+    latestUnanswered = unanswered;
+
     renderAnalysts(analysts);
     renderUnanswered(unanswered);
     renderNotices(notices);
+
+    if (newUnansweredAdditions > 0 || hasCriticalAlert) {
+      openNotificationHubForAlert();
+      clearHighlight(unansweredNoticeCard);
+      if (hasCriticalAlert) {
+        playAlertSound();
+      } else {
+        playNotificationSound();
+      }
+    }
   } catch (error) {
     console.error(error);
     setEmptyState(analystsList, "Erro ao carregar analistas.");
@@ -530,9 +661,6 @@ async function refreshStatusData() {
       getCloudflareStatus(),
     ]);
 
-    console.log("Meta Whatsapp Status:", metaStatus);
-    console.log("Cloudflare Status:", cloudflareStatus);
-
     renderStatus([{name: "Meta Whatsapp", response: metaStatus}, {name: "Cloudflare", response: cloudflareStatus}]);
   } catch (error) {
     console.error(error);
@@ -554,6 +682,7 @@ async function bootstrap() {
 
   setInterval(refreshDashboardData, REFRESH.dashboardMs);
   setInterval(refreshStatusData, REFRESH.statusMs);
+  setInterval(refreshUnansweredTimers, REFRESH.unansweredTickMs);
 }
 
 bootstrap();
