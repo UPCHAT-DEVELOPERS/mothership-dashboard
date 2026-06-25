@@ -686,3 +686,11 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+const refreshBtn = document.getElementById("refreshBtn");
+if (refreshBtn) {
+  refreshBtn.addEventListener("click", () => {
+    refreshDashboardData();
+    refreshStatusData();
+  });
+}
