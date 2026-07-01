@@ -190,7 +190,7 @@ function initSoundControl() {
   soundToggle.addEventListener("click", () => {
     soundEnabled = !soundEnabled;
     soundToggle.setAttribute("aria-pressed", String(!soundEnabled));
-    soundToggle.textContent = soundEnabled ? "Som ligado" : "Som desligado";
+    soundToggle.textContent = soundEnabled ? "Som" : "Mudo";
 
     if (hubMinimized) {
       setNotificationHubMinimized(false);
